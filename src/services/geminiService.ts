@@ -24,7 +24,7 @@ STEP 1) Generate Text Plan (step == "text_plan")
 `;
 
 export const runPipeline = async (params: BuildUIParams): Promise<EngineOutput> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY as string });
 
   if (params.step === "text_plan") {
     const response = await ai.models.generateContent({

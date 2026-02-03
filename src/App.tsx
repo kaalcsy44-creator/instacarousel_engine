@@ -1,23 +1,31 @@
+import React, { useState, useRef } from "react";
+import SlideEditor from "./components/SlideEditor";
+import type {
+  EditableSlide,
+  BuildUIParams,
+  EngineOutput,
+  RecommendMode,
+  CarouselPage,
+} from "./types";
 
-import React, { useState, useRef } from 'react';
-import { 
-  Sparkles, 
+import {
+  Sparkles,
   Download,
   Loader2,
   AlertCircle,
   Image as ImageIcon,
   CheckCircle2,
   FileJson,
-  ArrowRight,
   Save,
   Check,
   Languages,
-  Instagram
-} from 'lucide-react';
-import { BuildUIParams, EngineOutput, RecommendMode, CarouselPage } from './types';
-import { runPipeline } from './services/geminiService';
+  Instagram,
+} from "lucide-react";
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw8o4NXGeUpbhcEiXHGcHn3aZyeO_-BzZVAs3QqBBYz4gW-7wP8fMdBNSXwh9ZQKzLikg/exec";
+import { runPipeline } from "./services/geminiService";
+
+const GAS_URL =
+  "https://script.google.com/macros/s/AKfycbw8o4NXGeUpbhcEiXHGcHn3aZyeO_-BzZVAs3QqBBYz4gW-7wP8fMdBNSXwh9ZQKzLikg/exec";
 
 export default function App() {
   const [params, setParams] = useState<BuildUIParams>({
@@ -36,31 +44,97 @@ export default function App() {
     translation_mode: "double",
     region_timezone: "Asia/Seoul",
     recommend_time: "06:30",
-    today_date: new Date().toISOString().split('T')[0],
+    today_date: new Date().toISOString().split("T")[0],
     recommend_mode: "daily_candidates",
-    plan_json: null
+    plan_json: null,
   });
+
+  const [editableSlides, setEditableSlides] = useState<EditableSlide[] | null>(
+    null
+  );
+  const [showEditor, setShowEditor] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [currentStep, setCurrentStep] = useState<number>(0); 
+  const [currentStep, setCurrentStep] = useState<number>(0);
+
   const [planOutput, setPlanOutput] = useState<EngineOutput | null>(null);
   const [imagesOutput, setImagesOutput] = useState<EngineOutput | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
+  // ✅ 1) 한 번만 선언 (중복 제거) + executeStep 보다 위에 둠
+  const toEditableSlides = (pages: any[], imagesOut: any): EditableSlide[] => {
+    return (pages || []).map((p: any) => {
+      const bg = imagesOut?.images?.find((i: any) => i.page_index === p.page_number)
+        ?.image_asset;
+
+      return {
+        page_number: p.page_number,
+        background: bg,
+        bgColor: "#0b1220",
+        legibilityBandOn: false,
+        layers: [
+          {
+            id: `label-${p.page_number}`,
+            kind: "text",
+            text: p.label,
+            x: 90,
+            y: 160,
+            fontSize: 28,
+            fill: "#a5b4fc",
+            width: 900,
+            align: "center",
+            draggable: true,
+            fontStyle: "bold",
+          },
+          {
+            id: `content-${p.page_number}`,
+            kind: "text",
+            text: p.content,
+            x: 90,
+            y: 600,
+            fontSize: 64,
+            fill: "#ffffff",
+            width: 900,
+            align: "center",
+            lineHeight: 1.25,
+            draggable: true,
+            fontStyle: "bold",
+          },
+          {
+            id: `wm-${p.page_number}`,
+            kind: "text",
+            text: "@samcho0127",
+            x: 780,
+            y: 70,
+            fontSize: 22,
+            fill: "rgba(255,255,255,0.5)",
+            width: 260,
+            align: "right",
+            draggable: true,
+            fontStyle: "bold",
+          },
+        ],
+      };
+    });
+  };
+
+  // ✅ 2) 중괄호/if-else 구조 정상화
   const executeStep = async (step: "text_plan" | "images") => {
     setLoading(true);
     setError(null);
     setSaveSuccess(false);
+
     try {
-      const result = await runPipeline({ 
-        ...params, 
-        step, 
-        plan_json: step === "text_plan" ? null : planOutput 
+      const result = await runPipeline({
+        ...params,
+        step,
+        plan_json: step === "text_plan" ? null : planOutput,
       });
-      
+
       if (result.status === "error") {
         throw new Error(result.message || result.error_code || "Pipeline error");
       }
@@ -69,12 +143,32 @@ export default function App() {
         setPlanOutput(result);
         setImagesOutput(null);
         setCurrentStep(1);
+
+        const pages = result?.plan_json?.content?.pages || [];
+        setEditableSlides(toEditableSlides(pages, null)); // visuals 없어도 편집 가능
       } else if (step === "images") {
         setImagesOutput(result);
         if (currentStep < 2) setCurrentStep(2);
+
+        // 기존 편집 상태 유지 + background만 채우기
+        setEditableSlides((prev) => {
+          if (!prev) return prev;
+          return prev.map((s) => {
+            const bg = result?.images?.find((i: any) => i.page_index === s.page_number)
+              ?.image_asset;
+            return { ...s, background: bg || s.background };
+          });
+        });
       }
 
-      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+      setTimeout(
+        () =>
+          resultRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          }),
+        300
+      );
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -104,7 +198,7 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload),
-        mode: 'no-cors'
+        mode: "no-cors",
       });
 
       setSaveSuccess(true);
@@ -116,10 +210,14 @@ export default function App() {
     }
   };
 
-  const generateCompositedImage = async (page: CarouselPage, base64Image: string): Promise<string> => {
+  // ---- 기존 Canvas 합성 다운로드 로직(그대로 유지) ----
+  const generateCompositedImage = async (
+    page: CarouselPage,
+    base64Image: string
+  ): Promise<string> => {
     return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
       if (!ctx) return resolve(base64Image);
 
       canvas.width = 1080;
@@ -146,15 +244,15 @@ export default function App() {
         ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
 
         const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        grad.addColorStop(0, 'rgba(0,0,0,0.6)');
-        grad.addColorStop(0.5, 'rgba(0,0,0,0.3)');
-        grad.addColorStop(1, 'rgba(0,0,0,0.8)');
+        grad.addColorStop(0, "rgba(0,0,0,0.6)");
+        grad.addColorStop(0.5, "rgba(0,0,0,0.3)");
+        grad.addColorStop(1, "rgba(0,0,0,0.8)");
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,0.8)";
         ctx.shadowBlur = 10;
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
@@ -162,43 +260,40 @@ export default function App() {
         const isSlide1 = page.page_number === 1;
 
         if (isSlide1) {
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 110px sans-serif';
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 110px sans-serif";
           wrapText(ctx, `"${page.content}"`, canvas.width / 2, canvas.height / 2 - 40, 900, 130);
 
           ctx.shadowBlur = 0;
-          ctx.font = 'bold 36px sans-serif';
+          ctx.font = "bold 36px sans-serif";
           const labelWidth = ctx.measureText(page.label.toUpperCase()).width + 60;
-          ctx.fillStyle = 'rgba(79, 70, 229, 0.9)';
+          ctx.fillStyle = "rgba(79, 70, 229, 0.9)";
           roundRect(ctx, canvas.width / 2 - labelWidth / 2, canvas.height / 2 + 100, labelWidth, 60, 30, true);
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = "#ffffff";
           ctx.fillText(page.label.toUpperCase(), canvas.width / 2, canvas.height / 2 + 130);
         } else {
           ctx.shadowBlur = 0;
-          ctx.font = 'bold 28px sans-serif';
+          ctx.font = "bold 28px sans-serif";
           const labelText = page.label.toUpperCase();
           const tw = ctx.measureText(labelText).width + 30;
-          ctx.fillStyle = 'rgba(0,0,0,0.4)';
+          ctx.fillStyle = "rgba(0,0,0,0.4)";
           roundRect(ctx, canvas.width / 2 - tw / 2, canvas.height / 2 - 250, tw, 45, 10, true);
-          ctx.fillStyle = '#818cf8';
+          ctx.fillStyle = "#818cf8";
           ctx.fillText(labelText, canvas.width / 2, canvas.height / 2 - 227);
 
           ctx.shadowBlur = 10;
-          ctx.fillStyle = '#ffffff';
-          
+          ctx.fillStyle = "#ffffff";
+
           const standardFontSize = 75;
 
           if (page.page_number === 2) {
-            // Split content into English Expression and Korean Explanation
-            const lines = page.content.split('\n');
+            const lines = page.content.split("\n");
             const englishPart = lines[0];
-            const koreanPart = lines.slice(1).join('\n');
+            const koreanPart = lines.slice(1).join("\n");
 
-            // Draw English (Stay as is)
             ctx.font = `bold ${standardFontSize}px sans-serif`;
             ctx.fillText(englishPart, canvas.width / 2, canvas.height / 2 - 40);
 
-            // Draw Korean (Reduced by 50%)
             if (koreanPart) {
               ctx.font = `bold ${Math.floor(standardFontSize * 0.5)}px sans-serif`;
               ctx.fillText(koreanPart, canvas.width / 2, canvas.height / 2 + 60);
@@ -208,8 +303,8 @@ export default function App() {
             let contentToRender = page.content;
 
             if (page.page_number === 5) {
-              fontSize = Math.floor(standardFontSize * 0.8); // 80% Decrease for Summary
-              contentToRender = contentToRender.replace(/^(Summary|요약|Summary:|요약:)\s*/i, '');
+              fontSize = Math.floor(standardFontSize * 0.8);
+              contentToRender = contentToRender.replace(/^(Summary|요약|Summary:|요약:)\s*/i, "");
             }
 
             ctx.font = `bold ${fontSize}px sans-serif`;
@@ -218,53 +313,68 @@ export default function App() {
         }
 
         ctx.shadowBlur = 0;
-        ctx.textAlign = 'right';
-        ctx.font = 'bold 24px sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.fillText('@samcho0127', canvas.width - 50, 60);
+        ctx.textAlign = "right";
+        ctx.font = "bold 24px sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.fillText("@samcho0127", canvas.width - 50, 60);
 
-        ctx.textAlign = 'left';
-        ctx.font = 'bold 28px sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillText(page.page_number.toString().padStart(2, '0'), 50, canvas.height - 60);
+        ctx.textAlign = "left";
+        ctx.font = "bold 28px sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.fillText(page.page_number.toString().padStart(2, "0"), 50, canvas.height - 60);
 
-        resolve(canvas.toDataURL('image/png'));
+        resolve(canvas.toDataURL("image/png"));
       };
       img.src = base64Image;
     });
   };
 
-  function wrapText(ctx: any, text: string, x: number, y: number, maxWidth: number, lineHeight: number) {
-    const paragraphs = text.split('\n');
+  function wrapText(
+    ctx: any,
+    text: string,
+    x: number,
+    y: number,
+    maxWidth: number,
+    lineHeight: number
+  ) {
+    const paragraphs = text.split("\n");
     let allLines: string[] = [];
 
-    paragraphs.forEach(p => {
-      const words = p.split(' ');
-      let line = '';
+    paragraphs.forEach((p) => {
+      const words = p.split(" ");
+      let line = "";
       for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
+        const testLine = line + words[n] + " ";
         const metrics = ctx.measureText(testLine);
         const testWidth = metrics.width;
         if (testWidth > maxWidth && n > 0) {
           allLines.push(line);
-          line = words[n] + ' ';
+          line = words[n] + " ";
         } else {
           line = testLine;
         }
       }
       allLines.push(line);
     });
-    
+
     const totalHeight = allLines.length * lineHeight;
-    let startY = y - (totalHeight / 2) + (lineHeight / 2);
-    
+    let startY = y - totalHeight / 2 + lineHeight / 2;
+
     for (let k = 0; k < allLines.length; k++) {
       ctx.fillText(allLines[k].trim(), x, startY);
       startY += lineHeight;
     }
   }
 
-  function roundRect(ctx: any, x: number, y: number, width: number, height: number, radius: number, fill: boolean) {
+  function roundRect(
+    ctx: any,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+    fill: boolean
+  ) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
     ctx.lineTo(x + width - radius, y);
@@ -279,11 +389,19 @@ export default function App() {
     if (fill) ctx.fill();
   }
 
+  const currentPlan = planOutput?.plan_json;
+  const pages = currentPlan?.content?.pages;
+  const caption = currentPlan?.content?.caption;
+
+  const getSlideImage = (pageNum: number) => {
+    return imagesOutput?.images?.find((img: any) => img.page_index === pageNum)?.image_asset;
+  };
+
   const downloadComposited = async (page: CarouselPage) => {
     const raw = getSlideImage(page.page_number);
     if (!raw) return;
     const finalData = await generateCompositedImage(page, raw);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = finalData;
     link.download = `carousel_slide_${page.page_number}.png`;
     document.body.appendChild(link);
@@ -299,37 +417,8 @@ export default function App() {
   };
 
   const updateParam = (key: keyof BuildUIParams, value: any) => {
-    setParams(prev => ({ ...prev, [key]: value }));
+    setParams((prev) => ({ ...prev, [key]: value }));
   };
-
-  const currentPlan = planOutput?.plan_json;
-  const pages = currentPlan?.content?.pages;
-  const caption = currentPlan?.content?.caption;
-
-  const getSlideImage = (pageNum: number) => {
-    return imagesOutput?.images?.find(img => img.page_index === pageNum)?.image_asset;
-  };
-const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
-  return pages.map((p) => {
-    const bg = imagesOutput?.images?.find((i: any) => i.page_index === p.page_number)?.image_asset;
-
-    return {
-      page_number: p.page_number,
-      background: bg,
-      bgColor: "#0b1220", // visuals 없을 때 기본 배경(어두운색)
-      layers: [
-        // 라벨
-        { id:`label-${p.page_number}`, kind:"text", text: p.label, x: 90, y: 160, fontSize: 28, fill:"#a5b4fc", width: 900, align:"center", draggable:true },
-        // 본문
-        { id:`content-${p.page_number}`, kind:"text", text: p.content, x: 90, y: 600, fontSize: 64, fill:"#ffffff", width: 900, align:"center", lineHeight: 1.25, fontStyle:"bold", draggable:true },
-        // 워터마크(드래그 가능)
-        { id:`wm-${p.page_number}`, kind:"text", text: "@samcho0127", x: 780, y: 70, fontSize: 22, fill:"rgba(255,255,255,0.5)", width: 260, align:"right", draggable:true },
-      ]
-    };
-  });
-};
-
-
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 font-sans selection:bg-indigo-100 selection:text-indigo-900 relative">
@@ -365,7 +454,11 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
               <button
                 key={m}
                 onClick={() => updateParam("mode", m as "generate" | "recommend")}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold capitalize transition-all ${params.mode === m ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-400'}`}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold capitalize transition-all ${
+                  params.mode === m
+                    ? "bg-white text-indigo-600 shadow-sm border border-slate-100"
+                    : "text-slate-400"
+                }`}
               >
                 {m}
               </button>
@@ -373,32 +466,64 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
           </div>
 
           <div className="space-y-4">
-            {params.mode === 'generate' ? (
+            {params.mode === "generate" ? (
               <div className="space-y-3">
-                <input type="text" value={params.query_ko} onChange={e => updateParam("query_ko", e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="예: 분위기 파악해" />
-                <input type="text" value={params.query_en} onChange={e => updateParam("query_en", e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Read the room" />
+                <input
+                  type="text"
+                  value={params.query_ko}
+                  onChange={(e) => updateParam("query_ko", e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="예: 분위기 파악해"
+                />
+                <input
+                  type="text"
+                  value={params.query_en}
+                  onChange={(e) => updateParam("query_en", e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="e.g. Read the room"
+                />
               </div>
             ) : (
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Recommendation Mode</label>
-                <select value={params.recommend_mode} onChange={e => updateParam("recommend_mode", e.target.value as RecommendMode)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                  Recommendation Mode
+                </label>
+                <select
+                  value={params.recommend_mode}
+                  onChange={(e) =>
+                    updateParam("recommend_mode", e.target.value as RecommendMode)
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm"
+                >
                   <option value="daily_candidates">Daily Candidates (3x)</option>
                 </select>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
-              <select value={params.difficulty} onChange={e => updateParam("difficulty", e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+              <select
+                value={params.difficulty}
+                onChange={(e) => updateParam("difficulty", e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
+              >
                 <option value="basic">Basic</option>
                 <option value="intermediate">Intermediate</option>
               </select>
-              <select value={params.tone} onChange={e => updateParam("tone", e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+              <select
+                value={params.tone}
+                onChange={(e) => updateParam("tone", e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
+              >
                 <option value="friendly">Friendly</option>
                 <option value="humorous">Humorous</option>
               </select>
             </div>
 
-            <select value={params.selected_style} onChange={e => updateParam("selected_style", e.target.value)} className="w-full bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl px-4 py-3 text-sm">
+            <select
+              value={params.selected_style}
+              onChange={(e) => updateParam("selected_style", e.target.value)}
+              className="w-full bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl px-4 py-3 text-sm"
+            >
               <option value="A_photo">A_Photo (Realistic)</option>
               <option value="B_comic">B_Comic (Illustration)</option>
             </select>
@@ -406,9 +531,23 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
         </div>
 
         <div className="space-y-4 pt-6 border-t border-slate-100">
-          <button onClick={() => executeStep("text_plan")} disabled={loading} className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all group ${currentStep >= 1 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'}`}>
+          <button
+            onClick={() => executeStep("text_plan")}
+            disabled={loading}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all group ${
+              currentStep >= 1
+                ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
+            }`}
+          >
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${currentStep >= 1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+              <div
+                className={`p-2 rounded-lg ${
+                  currentStep >= 1
+                    ? "bg-indigo-600 text-white"
+                    : "bg-slate-100 text-slate-400"
+                }`}
+              >
                 <FileJson size={18} />
               </div>
               <p className="text-sm font-bold">1. Text Plan</p>
@@ -416,14 +555,45 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
             {currentStep >= 1 && <CheckCircle2 size={18} className="text-indigo-600" />}
           </button>
 
-          <button onClick={() => executeStep("images")} disabled={loading || !planOutput} className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all group ${currentStep >= 2 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : planOutput ? 'bg-white border-slate-200 text-slate-600 hover:border-emerald-300' : 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed'}`}>
+          <button
+            onClick={() => executeStep("images")}
+            disabled={loading || !planOutput}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all group ${
+              currentStep >= 2
+                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                : planOutput
+                ? "bg-white border-slate-200 text-slate-600 hover:border-emerald-300"
+                : "bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed"
+            }`}
+          >
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${currentStep >= 2 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+              <div
+                className={`p-2 rounded-lg ${
+                  currentStep >= 2
+                    ? "bg-emerald-600 text-white"
+                    : "bg-slate-100 text-slate-400"
+                }`}
+              >
                 <ImageIcon size={18} />
               </div>
               <p className="text-sm font-bold">2. Visuals</p>
             </div>
-            {currentStep >= 2 && <CheckCircle2 size={18} className="text-emerald-600" />}
+            {currentStep >= 2 && (
+              <CheckCircle2 size={18} className="text-emerald-600" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setShowEditor(true)}
+            disabled={!editableSlides}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${
+              editableSlides
+                ? "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
+                : "bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed"
+            }`}
+          >
+            <span className="text-sm font-bold">3. Edit</span>
+            <span className="text-xs font-black text-slate-400">Drag + Align</span>
           </button>
         </div>
 
@@ -442,83 +612,94 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
               <div className="relative w-40 h-40 bg-white rounded-[56px] shadow-2xl flex items-center justify-center text-indigo-600 border border-slate-50 rotate-3 hover:rotate-0 transition-transform duration-500">
                 <Sparkles size={80} strokeWidth={1.5} />
               </div>
-              <h2 className="text-5xl font-black text-slate-800 tracking-tighter leading-tight">Instant <br/><span className="text-indigo-600">Carousel.</span></h2>
-              <p className="text-slate-400 text-lg leading-relaxed font-medium">@samcho0127 전용 고품질 캐러셀 생성기</p>
+              <h2 className="text-5xl font-black text-slate-800 tracking-tighter leading-tight">
+                Instant <br />
+                <span className="text-indigo-600">Carousel.</span>
+              </h2>
+              <p className="text-slate-400 text-lg leading-relaxed font-medium">
+                @samcho0127 전용 고품질 캐러셀 생성기
+              </p>
             </div>
           ) : (
             <>
               <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-[32px] shadow-sm border border-slate-100 gap-4 sticky top-0 z-30 backdrop-blur-md bg-white/80">
                 <div className="flex items-center gap-3 px-6">
-                   <Languages className="text-indigo-600" size={24} />
-                   <h2 className="font-black text-slate-800 tracking-tight">Slide View</h2>
+                  <Languages className="text-indigo-600" size={24} />
+                  <h2 className="font-black text-slate-800 tracking-tight">Slide View</h2>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
-                  <button onClick={downloadAllImages} disabled={!imagesOutput} title="Download All" className="flex-1 sm:flex-none p-3.5 bg-slate-50 text-slate-500 rounded-2xl hover:bg-indigo-50 transition-colors shadow-sm disabled:opacity-30">
+                  <button
+                    onClick={downloadAllImages}
+                    disabled={!imagesOutput}
+                    title="Download All"
+                    className="flex-1 sm:flex-none p-3.5 bg-slate-50 text-slate-500 rounded-2xl hover:bg-indigo-50 transition-colors shadow-sm disabled:opacity-30"
+                  >
                     <Download size={22} />
                   </button>
-                  <button onClick={handleSaveToSheets} disabled={saving} className={`flex-1 sm:flex-none px-8 py-3 rounded-2xl text-sm font-black flex items-center justify-center gap-2 shadow-xl transition-all ${saveSuccess ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white disabled:opacity-50'}`}>
-                    {saving ? <Loader2 className="animate-spin" size={18} /> : saveSuccess ? <Check size={18} /> : <Save size={18} />}
-                    {saveSuccess ? 'Saved' : 'Export'}
+                  <button
+                    onClick={handleSaveToSheets}
+                    disabled={saving}
+                    className={`flex-1 sm:flex-none px-8 py-3 rounded-2xl text-sm font-black flex items-center justify-center gap-2 shadow-xl transition-all ${
+                      saveSuccess
+                        ? "bg-emerald-600 text-white"
+                        : "bg-indigo-600 text-white disabled:opacity-50"
+                    }`}
+                  >
+                    {saving ? (
+                      <Loader2 className="animate-spin" size={18} />
+                    ) : saveSuccess ? (
+                      <Check size={18} />
+                    ) : (
+                      <Save size={18} />
+                    )}
+                    {saveSuccess ? "Saved" : "Export"}
                   </button>
                 </div>
               </div>
 
-              {params.mode === 'recommend' && currentPlan?.recommendation?.daily_candidates && (
-                <section className="bg-gradient-to-br from-indigo-700 to-indigo-900 rounded-[56px] p-12 text-white shadow-2xl shadow-indigo-200 relative overflow-hidden group animate-in fade-in slide-in-from-top-4 duration-500">
-                  <h2 className="text-3xl font-black mb-10 flex items-center gap-4"><Sparkles className="text-yellow-400" /> Daily Candidates</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
-                    {currentPlan.recommendation.daily_candidates.map((candidate, i) => (
-                      <div key={i} className="bg-white/10 backdrop-blur-md p-8 rounded-[36px] border border-white/10 hover:bg-white/15 transition-all shadow-xl group/card">
-                        <div className="text-yellow-400 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Idea {i+1}</div>
-                        <div className="space-y-4">
-                           <div className="space-y-1">
-                              <p className="text-[10px] font-black text-indigo-300 uppercase">Korean</p>
-                              <p className="text-xl font-black leading-tight">{candidate.ko}</p>
-                           </div>
-                           <div className="space-y-1 pt-4 border-t border-white/10">
-                              <p className="text-[10px] font-black text-indigo-300 uppercase">English</p>
-                              <p className="text-base font-bold opacity-80">{candidate.en}</p>
-                           </div>
-                        </div>
-                        <button 
-                          onClick={() => {
-                            updateParam("query_ko", candidate.ko);
-                            updateParam("query_en", candidate.en);
-                            updateParam("mode", "generate");
-                          }}
-                          className="mt-8 w-full py-3 bg-white/10 hover:bg-white text-white hover:text-indigo-900 rounded-2xl text-xs font-black transition-all"
-                        >
-                          Use this idea
-                        </button>
-                      </div>
-                    ))}
+              {showEditor && editableSlides && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-black text-slate-800">Editor</h3>
+                    <button
+                      onClick={() => setShowEditor(false)}
+                      className="px-4 py-2 rounded-xl bg-slate-100 font-bold"
+                    >
+                      Close
+                    </button>
                   </div>
-                </section>
+                  <SlideEditor slides={editableSlides} setSlides={setEditableSlides} />
+                </div>
               )}
 
               {pages && (
                 <section className="space-y-8 animate-in fade-in duration-700">
                   <div className="flex gap-8 overflow-x-auto pb-12 pt-2 px-4 scrollbar-hide snap-x">
-                    {pages.map((page, idx) => {
+                    {pages.map((page: any, idx: number) => {
                       const img = getSlideImage(page.page_number);
                       const isSlide1 = page.page_number === 1;
                       const isSlide2 = page.page_number === 2;
                       const isSlide5 = page.page_number === 5;
-                      
+
                       let contentToPreview = page.content;
                       if (isSlide5) {
-                        contentToPreview = contentToPreview.replace(/^(Summary|요약|Summary:|요약:)\s*/i, '');
+                        contentToPreview = contentToPreview.replace(/^(Summary|요약|Summary:|요약:)\s*/i, "");
                       }
 
                       return (
-                        <div key={idx} className="min-w-[400px] w-[400px] aspect-[4/5] bg-slate-900 rounded-[32px] shadow-2xl overflow-hidden flex flex-col snap-start relative group transition-all">
+                        <div
+                          key={idx}
+                          className="min-w-[400px] w-[400px] aspect-[4/5] bg-slate-900 rounded-[32px] shadow-2xl overflow-hidden flex flex-col snap-start relative group transition-all"
+                        >
                           <div className="absolute inset-0 z-0">
                             {img ? (
                               <img src={img} className="w-full h-full object-cover" alt={page.content} />
                             ) : (
                               <div className="w-full h-full flex flex-col items-center justify-center text-slate-600 bg-slate-800">
                                 <ImageIcon size={56} className="opacity-10 mb-4" />
-                                <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Ready for Visuals</span>
+                                <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">
+                                  Ready for Visuals
+                                </span>
                               </div>
                             )}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/30"></div>
@@ -544,28 +725,33 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
                                 {isSlide2 ? (
                                   <div className="space-y-4">
                                     <p className="font-black text-white text-[32px] leading-[1.4] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] max-w-[340px] whitespace-pre-wrap">
-                                      {page.content.split('\n')[0]}
+                                      {page.content.split("\n")[0]}
                                     </p>
                                     <p className="font-bold text-white text-[16px] leading-[1.4] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] max-w-[340px] whitespace-pre-wrap opacity-90">
-                                      {page.content.split('\n').slice(1).join('\n')}
+                                      {page.content.split("\n").slice(1).join("\n")}
                                     </p>
                                   </div>
                                 ) : (
-                                  <p className={`font-black text-white leading-[1.4] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] max-w-[340px] whitespace-pre-wrap 
-                                    ${isSlide5 ? 'text-[25px]' : 'text-[32px]'}`}>
+                                  <p
+                                    className={`font-black text-white leading-[1.4] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] max-w-[340px] whitespace-pre-wrap ${
+                                      isSlide5 ? "text-[25px]" : "text-[32px]"
+                                    }`}
+                                  >
                                     {contentToPreview}
                                   </p>
                                 )}
                               </>
                             )}
 
-                            <div className="absolute top-10 right-10 text-[10px] font-black text-white/50 tracking-widest">@samcho0127</div>
+                            <div className="absolute top-10 right-10 text-[10px] font-black text-white/50 tracking-widest">
+                              @samcho0127
+                            </div>
                             <div className="absolute bottom-10 left-10 text-[12px] font-black text-white/40 tracking-[0.4em]">
-                              {page.page_number.toString().padStart(2, '0')}
+                              {page.page_number.toString().padStart(2, "0")}
                             </div>
 
                             {img && (
-                              <button 
+                              <button
                                 onClick={() => downloadComposited(page)}
                                 className="absolute bottom-10 right-10 p-3 bg-white/10 hover:bg-white/30 backdrop-blur-md rounded-full text-white transition-all opacity-0 group-hover:opacity-100"
                               >
@@ -574,7 +760,7 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
                             )}
                           </div>
                         </div>
-                      )
+                      );
                     })}
                   </div>
                 </section>
@@ -584,11 +770,15 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
                 {caption && (
                   <div className="bg-white rounded-[56px] shadow-sm border border-slate-100 overflow-hidden group hover:shadow-xl transition-shadow">
                     <div className="p-10 border-b border-slate-50 flex items-center gap-4">
-                      <div className="bg-pink-100 p-3 rounded-2xl text-pink-600"><Instagram size={24} /></div>
+                      <div className="bg-pink-100 p-3 rounded-2xl text-pink-600">
+                        <Instagram size={24} />
+                      </div>
                       <h3 className="font-black text-slate-800 text-xl">Insta Caption</h3>
                     </div>
                     <div className="p-10 bg-slate-50/20">
-                       <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-[1.8] font-bold bg-white p-10 rounded-[40px] border border-slate-100 shadow-inner">{caption}</pre>
+                      <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-[1.8] font-bold bg-white p-10 rounded-[40px] border border-slate-100 shadow-inner">
+                        {caption}
+                      </pre>
                     </div>
                   </div>
                 )}
@@ -600,4 +790,3 @@ const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
     </div>
   );
 }
-

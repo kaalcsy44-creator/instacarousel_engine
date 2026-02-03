@@ -309,24 +309,26 @@ export default function App() {
   const getSlideImage = (pageNum: number) => {
     return imagesOutput?.images?.find(img => img.page_index === pageNum)?.image_asset;
   };
-  const makeEditableSlides = (pages, imagesOutput): EditableSlide[] => {
+const toEditableSlides = (pages: any[], imagesOutput: any): EditableSlide[] => {
   return pages.map((p) => {
-    const bg = imagesOutput?.images?.find(i => i.page_index === p.page_number)?.image_asset;
+    const bg = imagesOutput?.images?.find((i: any) => i.page_index === p.page_number)?.image_asset;
 
     return {
       page_number: p.page_number,
       background: bg,
+      bgColor: "#0b1220", // visuals 없을 때 기본 배경(어두운색)
       layers: [
-        // 라벨(상단)
-        { id:`label-${p.page_number}`, kind:"text", text: p.label, x: 540, y: 140, fontSize: 28, fill:"#a5b4fc", align:"center", width: 900, draggable:true },
-        // 본문(중앙)
-        { id:`content-${p.page_number}`, kind:"text", text: p.content, x: 540, y: 650, fontSize: 64, fill:"#ffffff", align:"center", width: 900, lineHeight: 1.25, draggable:true },
-        // 워터마크(우상단)
-        { id:`wm-${p.page_number}`, kind:"text", text: "@samcho0127", x: 1030, y: 60, fontSize: 22, fill:"rgba(255,255,255,0.5)", align:"right", width: 400, draggable:true }
+        // 라벨
+        { id:`label-${p.page_number}`, kind:"text", text: p.label, x: 90, y: 160, fontSize: 28, fill:"#a5b4fc", width: 900, align:"center", draggable:true },
+        // 본문
+        { id:`content-${p.page_number}`, kind:"text", text: p.content, x: 90, y: 600, fontSize: 64, fill:"#ffffff", width: 900, align:"center", lineHeight: 1.25, fontStyle:"bold", draggable:true },
+        // 워터마크(드래그 가능)
+        { id:`wm-${p.page_number}`, kind:"text", text: "@samcho0127", x: 780, y: 70, fontSize: 22, fill:"rgba(255,255,255,0.5)", width: 260, align:"right", draggable:true },
       ]
     };
   });
 };
+
 
 
   return (

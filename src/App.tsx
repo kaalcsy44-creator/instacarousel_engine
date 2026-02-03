@@ -309,6 +309,25 @@ export default function App() {
   const getSlideImage = (pageNum: number) => {
     return imagesOutput?.images?.find(img => img.page_index === pageNum)?.image_asset;
   };
+  const makeEditableSlides = (pages, imagesOutput): EditableSlide[] => {
+  return pages.map((p) => {
+    const bg = imagesOutput?.images?.find(i => i.page_index === p.page_number)?.image_asset;
+
+    return {
+      page_number: p.page_number,
+      background: bg,
+      layers: [
+        // 라벨(상단)
+        { id:`label-${p.page_number}`, kind:"text", text: p.label, x: 540, y: 140, fontSize: 28, fill:"#a5b4fc", align:"center", width: 900, draggable:true },
+        // 본문(중앙)
+        { id:`content-${p.page_number}`, kind:"text", text: p.content, x: 540, y: 650, fontSize: 64, fill:"#ffffff", align:"center", width: 900, lineHeight: 1.25, draggable:true },
+        // 워터마크(우상단)
+        { id:`wm-${p.page_number}`, kind:"text", text: "@samcho0127", x: 1030, y: 60, fontSize: 22, fill:"rgba(255,255,255,0.5)", align:"right", width: 400, draggable:true }
+      ]
+    };
+  });
+};
+
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 font-sans selection:bg-indigo-100 selection:text-indigo-900 relative">

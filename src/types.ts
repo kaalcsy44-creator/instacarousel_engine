@@ -66,3 +66,69 @@ export interface EngineOutput {
   error_code?: string;
   message?: string;
 }
+export type LayerBase = {
+  id: string;
+  x: number;
+  y: number;
+  rotation?: number;
+  opacity?: number;
+  draggable?: boolean;
+};
+
+export type TextLayer = LayerBase & {
+  kind: "text";
+  text: string;
+  fontSize: number;
+  fontStyle?: string; // "bold" 등
+  fill: string;       // "#ffffff"
+  width?: number;     // 줄바꿈 폭
+  align?: "left" | "center" | "right";
+  lineHeight?: number;
+};
+
+export type RectLayer = LayerBase & {
+  kind: "rect";
+  width: number;
+  height: number;
+  fill: string;
+  cornerRadius?: number;
+  stroke?: string;
+  strokeWidth?: number;
+};
+
+export type CircleLayer = LayerBase & {
+  kind: "circle";
+  radius: number;
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+};
+
+export type IconLayer = LayerBase & {
+  kind: "icon";
+  // lucide-react 아이콘 이름(간단히 string)
+  iconName: string;   // "Sparkles" 같은 값
+  size: number;
+  color: string;
+};
+
+export type StickerLayer = LayerBase & {
+  kind: "sticker";
+  // 스티커 이미지를 dataURL로 저장 (업로드하면 dataURL 생성)
+  dataUrl: string;
+  width: number;
+  height: number;
+};
+
+export type SlideLayer = TextLayer | RectLayer | CircleLayer | IconLayer | StickerLayer;
+
+export type EditableSlide = {
+  page_number: number;
+  background?: string; // dataURL(visuals 결과)
+  layers: SlideLayer[];
+};
+
+
+
+
+
